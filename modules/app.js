@@ -36,6 +36,8 @@
     AV.pwa.updateQueuePill();
     AV.pwa.maybeShowInstallHint();
     AV.pwa.lockZoom();
+    const ver = document.getElementById('appVersion');
+    if (ver) ver.textContent = 'v' + (window.API_CONFIG?.APP_VERSION || '1.0.3');
     await AV.pwa.register();
 
     AV.registro.init();

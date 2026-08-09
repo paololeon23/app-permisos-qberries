@@ -874,25 +874,16 @@ body.pdf-modal-open {
   box-shadow: 0 -2px 20px rgba(26, 35, 48, 0.08);
 }
 
-.bottom-nav-stack {
-  pointer-events: none;
-  width: min(360px, 100%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
 .app-version {
-  margin: 0;
-  padding: 0 4px;
-  font-size: 0.62rem;
+  margin: 16px 0 4px;
+  padding: 0;
+  text-align: center;
+  font-size: 0.68rem;
   font-weight: 500;
   letter-spacing: 0.02em;
   color: #9aa3ad;
-  line-height: 1;
+  line-height: 1.2;
   user-select: none;
-  pointer-events: none;
 }
 
 .nav-btn {

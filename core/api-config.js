@@ -19,7 +19,7 @@ window.API_CONFIG = {
   HISTORY_KEY: 'av_permisos_historial_v1',
 
   APP_NAME: 'Pase de salida Q Berries',
-  APP_VERSION: '1.0.2',
+  APP_VERSION: '1.0.3',
   COMPANY: 'Q Berries',
   YEAR: 2026,
   TIMEZONE: 'America/Lima',
