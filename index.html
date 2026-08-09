@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1f7a45" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="format-detection" content="telephone=no" />
+  <meta name="description" content="Pase de salida Q Berries — registro de salidas laborales" />
+  <title>Pase de salida · Q Berries</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+  <noscript>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+  </noscript>
+  <link rel="stylesheet" href="./vendor/flatpickr.min.css" />
+  <link rel="stylesheet" href="./css/app.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="header-row">
+        <div class="brand-block">
+          <div class="brand-mark-wrap">
+            <img class="brand-mark" src="./assets/logo-qberries-white.png" alt="Q Berries" />
+          </div>
+          <div class="brand-text">
+            <p class="brand-kicker">Q Berries</p>
+            <h1>Pase de salida</h1>
+            <p class="brand-sub">Control de salidas laborales</p>
+          </div>
+        </div>
+        <div class="status-pills" aria-live="polite">
+          <span id="netPill" class="status-chip is-online" title="Estado de conexión">
+            <span class="status-dot"></span>
+            <span class="status-text">En línea</span>
+          </span>
+          <span id="queuePill" class="status-chip is-queue" hidden title="Pendientes por enviar">
+            <i data-lucide="cloud-upload"></i>
+            <span class="status-text"><span id="queueCount">0</span> pendientes</span>
+          </span>
+        </div>
+      </div>
+      <div class="header-accent" aria-hidden="true"></div>
+    </header>
+
+    <div id="installHint" class="install-hint">
+      Para instalar: en Android use el menú ⋮ → <strong>Instalar aplicación</strong>. En iPhone: Compartir → <strong>Añadir a pantalla de inicio</strong>.
+    </div>
+
+    <main class="tab-panels">
+      <!-- ===== REGISTRO ===== -->
+      <section id="panel-registro" class="panel is-active" data-panel="registro">
+        <form id="formPermiso" autocomplete="off" novalidate>
+          <div class="card">
+            <h2 class="card-title"><i data-lucide="id-card"></i> Datos del trabajador</h2>
+            <p class="helper">Ingrese el DNI del trabajador. Nombre, cargo y fecha de ingreso se completan automáticamente.</p>
+            <div class="field dni-hero" style="margin-bottom:12px">
+              <label for="dni">DNI del trabajador</label>
+              <input id="dni" name="dni" inputmode="numeric" maxlength="12" placeholder="Ej. 70839380" required autofocus autocomplete="off" />
+              <div id="dniStatus" class="dni-status" aria-live="polite"></div>
+            </div>
+            <div class="field" style="margin-bottom:12px">
+              <label for="nombres">Apellidos y nombres</label>
+              <input id="nombres" name="nombres" placeholder="Se completa automáticamente" readonly required />
+            </div>
+            <div class="field-grid two">
+              <div class="field">
+                <label for="cargo">Cargo</label>
+                <input id="cargo" name="cargo" placeholder="—" readonly required />
+              </div>
+              <div class="field">
+                <label for="fIngreso">F. Ingreso</label>
+                <input id="fIngreso" name="fIngreso" class="fp-input" placeholder="—" readonly required />
+              </div>
+            </div>
+            <p id="catalogMeta" class="helper" style="margin-top:10px;margin-bottom:0" hidden></p>
+          </div>
+
+          <div class="card">
+            <h2 class="card-title"><i data-lucide="list-checks"></i> Motivo del pase</h2>
+            <div class="motivo-grid" role="radiogroup" aria-label="Motivo del permiso">
+              <label class="motivo-opt">
+                <input type="radio" name="motivo" value="Por Salud" required />
+                <span>Por Salud</span>
+              </label>
+              <label class="motivo-opt">
+                <input type="radio" name="motivo" value="Personal" />
+                <span>Personal</span>
+              </label>
+              <label class="motivo-opt">
+                <input type="radio" name="motivo" value="Por tarea" />
+                <span>Por tarea</span>
+              </label>
+              <label class="motivo-opt">
+                <input type="radio" name="motivo" value="Justificación de falta" />
+                <span>Justificación de falta</span>
+              </label>
+            </div>
+            <label class="motivo-opt motivo-otro-opt" style="margin-top:8px;display:block">
+              <input type="radio" name="motivo" value="Otro" />
+              <span>Otro</span>
+            </label>
+            <div class="field" id="motivoOtroWrap" hidden style="margin-top:10px">
+              <label for="motivoOtro">Especifique el motivo</label>
+              <input id="motivoOtro" name="motivoOtro" maxlength="120" placeholder="Escriba el motivo…" autocomplete="off" />
+            </div>
+          </div>
+
+          <div class="card">
+            <h2 class="card-title"><i data-lucide="clock-3"></i> Fecha y hora de salida</h2>
+            <div class="field-grid two">
+              <div class="field">
+                <label for="fechaSalida">Fecha salida</label>
+                <input id="fechaSalida" name="fechaSalida" class="fp-input" required />
+              </div>
+              <div class="field">
+                <label for="horaSalida">Hora de salida</label>
+                <input id="horaSalida" name="horaSalida" class="fp-input" required />
+              </div>
+            </div>
+            <div class="field" style="margin-top:12px">
+              <label for="observacion">Observación (opcional)</label>
+              <textarea id="observacion" name="observacion" placeholder="Detalle opcional del pase" maxlength="400"></textarea>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2 class="card-title"><i data-lucide="shield-check"></i> Autorización del responsable</h2>
+            <p class="helper">Ingrese el DNI del responsable. Los datos se completan automáticamente y no se pueden editar.</p>
+            <div class="field dni-hero" style="margin-bottom:12px">
+              <label for="dniResponsable">DNI del responsable</label>
+              <input id="dniResponsable" name="dniResponsable" inputmode="numeric" maxlength="12" placeholder="Ej. 71234567" required autocomplete="off" />
+              <div id="dniRespStatus" class="dni-status" aria-live="polite"></div>
+            </div>
+            <div class="field" style="margin-bottom:12px">
+              <label for="responsable">Nombre del responsable</label>
+              <input id="responsable" name="responsable" placeholder="Se completa automáticamente" readonly required />
+            </div>
+            <div class="field-grid two">
+              <div class="field">
+                <label for="puestoResponsable">Cargo / puesto</label>
+                <input id="puestoResponsable" name="puestoResponsable" placeholder="—" readonly required />
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2 class="card-title"><i data-lucide="qr-code"></i> Verificación de carnet</h2>
+            <p class="helper">Escanee el QR del carnet del trabajador. Debe coincidir con el DNI ingresado. Al validar escuchará <strong>DNI validado</strong> (con o sin internet).</p>
+            <div id="carnetStatus" class="carnet-status is-pending">
+              <i data-lucide="shield-alert"></i>
+              <div>
+                <strong>Pendiente de verificación</strong>
+                <span>Aún no se escaneó el carnet</span>
+              </div>
+            </div>
+            <button type="button" class="btn btn-secondary" id="btnScanCarnet" style="margin-top:12px">
+              <i data-lucide="scan-line"></i> Escanear carnet QR
+            </button>
+          </div>
+
+          <div class="actions-stack">
+            <button type="submit" class="btn btn-primary" id="btnGuardar">
+              <i data-lucide="save"></i> Registrar pase de salida
+            </button>
+            <button type="button" class="btn btn-pdf" id="btnPdfPreview" disabled>
+              <i data-lucide="file-text"></i> Ver PDF
+            </button>
+            <p id="pdfHint" class="helper" style="margin:0;text-align:center">
+              Al ingresar el DNI puede ver el PDF al instante
+            </p>
+          </div>
+        </form>
+      </section>
+
+      <!-- ===== HISTORIAL ===== -->
+      <section id="panel-historial" class="panel" data-panel="historial">
+        <div class="card">
+          <h2 class="card-title"><i data-lucide="history"></i> Historial de subida</h2>
+          <p class="helper">
+            Solo en este celular. Sin internet el pase queda <strong>Pendiente</strong> y
+            <strong>se sube solo</strong> cuando la app detecta conexión. Luego pasa a
+            <strong>Enviado</strong>.
+          </p>
+          <div id="historialSummary" hidden></div>
+          <div id="historialList"></div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" role="tablist" aria-label="Navegación">
+      <div class="bottom-nav-stack">
+        <div class="bottom-nav-inner">
+          <button type="button" class="nav-btn is-active" data-tab="registro" aria-selected="true">
+            <span class="nav-ico"><i data-lucide="file-plus-2"></i></span>
+            <span class="nav-label">Registro</span>
+          </button>
+          <button type="button" class="nav-btn" data-tab="historial" aria-selected="false">
+            <span class="nav-ico"><i data-lucide="history"></i></span>
+            <span class="nav-label">Historial</span>
+          </button>
+        </div>
+        <p class="app-version" id="appVersion" aria-label="Versión de la app">v1.0.3</p>
+      </div>
+    </nav>
+  </div>
+
+  <!-- Modal PDF nativo (abre al instante, sin SweetAlert) -->
+  <div id="pdfModal" class="pdf-overlay" hidden>
+    <div class="pdf-sheet" role="dialog" aria-modal="true" aria-labelledby="pdfModalTitle">
+      <header class="pdf-sheet-head">
+        <strong id="pdfModalTitle">Pase de salida</strong>
+        <button type="button" class="pdf-x" id="pdfModalClose" aria-label="Cerrar">×</button>
+      </header>
+      <div class="pdf-sheet-body">
+        <div id="pdfLoading" class="pdf-loading">Cargando PDF…</div>
+        <iframe id="pdfFrame" class="pdf-frame" title="Vista previa PDF" hidden></iframe>
+      </div>
+      <footer class="pdf-sheet-foot">
+        <button type="button" class="btn btn-secondary" id="pdfModalCancel">Cerrar</button>
+        <button type="button" class="btn btn-primary" id="pdfModalDownload" disabled>Descargar</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Libs locales (offline) -->
+  <script src="./vendor/sweetalert2.all.min.js"></script>
+  <script src="./vendor/flatpickr.min.js"></script>
+  <script src="./vendor/flatpickr-es.js"></script>
+  <script src="./vendor/lucide.min.js"></script>
+  <script src="./vendor/jspdf.umd.min.js"></script>
+  <script src="./vendor/html5-qrcode.min.js"></script>
+
+  <!-- Core -->
+  <script src="./core/api-config.js"></script>
+  <script src="./core/utils.js"></script>
+  <script src="./core/network.js"></script>
+  <script src="./core/offline-queue.js"></script>
+  <script src="./core/workers-catalog.js"></script>
+  <script src="./core/api.js"></script>
+  <script src="./core/qr-scan.js"></script>
+  <script src="./core/pdf-resguardo.js"></script>
+  <script src="./core/pwa.js"></script>
+
+  <!-- Módulos -->
+  <script src="./modules/registro/registro.js"></script>
+  <script src="./modules/historial/historial.js"></script>
+  <script src="./modules/app.js"></script>
+</body>
+</html>
