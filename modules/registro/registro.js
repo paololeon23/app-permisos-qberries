@@ -25,9 +25,7 @@ AV.registro = {
       btn.removeAttribute('hidden');
     }
     if (hint) {
-      hint.textContent = this.lastSaved
-        ? 'Toque para ver / descargar el PDF'
-        : 'Toque Ver PDF — se abre en pantalla al instante';
+      hint.textContent = 'Toque Ver PDF — se abre con los datos del formulario';
     }
   },
 
@@ -35,31 +33,38 @@ AV.registro = {
     const btn = document.getElementById('btnPdfPreview');
     const hint = document.getElementById('pdfHint');
     if (btn) btn.disabled = true;
-    if (hint && msg) hint.textContent = msg;
+    if (hint) hint.textContent = msg || 'Ingrese el DNI para generar el PDF';
   },
 
-  /** Habilita PDF cuando ya hay DNI + nombre (datos del trabajador) */
+  /** PDF solo si el formulario tiene DNI + nombre ahora (no data pegada) */
   refreshPdfFromForm() {
     const dni = document.getElementById('dni')?.value.trim() || '';
     const nombres = document.getElementById('nombres')?.value.trim() || '';
     if (dni.length >= 8 && nombres) {
       this.enablePdfButton();
-    } else if (!this.lastSaved && !(AV.queue.history() || []).length) {
-      this.disablePdfButton('Ingrese el DNI para generar el PDF');
+    } else {
+      this.disablePdfButton('Ingrese el DNI del trabajador para ver el PDF');
     }
   },
 
   async descargarPdf(permiso) {
-    let data = permiso || this.lastSaved;
+    // Prioridad: lo que está en pantalla AHORA (evita data pegada de un pase anterior)
+    let data = permiso || null;
     if (!data) {
       const draft = this.collect();
       if (!draft.dni || draft.dni.length < 8 || !draft.nombres) {
+        AV.pdf.clearPrefetch?.();
         AV.toast('warning', 'PDF', 'Primero ingrese un DNI válido');
+        this.disablePdfButton('Ingrese el DNI del trabajador para ver el PDF');
         return false;
       }
       data = draft;
     }
-    // Modal con vista previa (online / offline)
+    // Si pidieron lastSaved explícito pero el form tiene otro DNI / vacío → no mezclar
+    const formDni = document.getElementById('dni')?.value.trim() || '';
+    if (!permiso && formDni && formDni !== String(data.dni || '')) {
+      data = this.collect();
+    }
     await AV.pdf.preview(data);
     return true;
   },
@@ -233,11 +238,8 @@ AV.registro = {
     // Precarga logo PDF para que abra rápido
     AV.pdf.warmup();
 
-    // Si ya hay historial, habilitar PDF del último
-    if (AV.queue.history().length) {
-      this.lastSaved = AV.queue.history()[0];
-      this.enablePdfButton();
-    }
+    // PDF deshabilitado hasta que haya DNI en el formulario
+    this.refreshPdfFromForm();
 
     this.form.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -521,6 +523,7 @@ AV.registro = {
       self.clearWorkerFields();
       self.clearDniBlock();
       self.setDniStatus('', dni.length ? 'Complete el DNI…' : '');
+      AV.pdf.clearPrefetch?.();
       self.refreshPdfFromForm();
       return;
     }
@@ -696,10 +699,10 @@ AV.registro = {
         }
       }
 
-      // No ocultar el botón al limpiar
       this.resetForm(true);
       document.dispatchEvent(new CustomEvent('av:historial-changed'));
-      this.enablePdfButton();
+      // Form vacío → PDF deshabilitado (sin data pegada)
+      this.refreshPdfFromForm();
     } catch (e) {
       if (e.code === 'DUPLICATE' || /ya tiene un pase/i.test(e.message || '')) {
         this.dniBlockedHoy = true;
@@ -732,6 +735,7 @@ AV.registro = {
     this.stampRegistro();
     this.syncMotivoUI();
     this.toggleMotivoOtro();
+    AV.pdf.clearPrefetch?.();
     this.refreshPdfFromForm();
     document.getElementById('dni')?.focus();
   },

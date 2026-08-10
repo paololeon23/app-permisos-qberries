@@ -12,6 +12,12 @@ AV.network = {
       err.code = 'NO_CONFIG';
       throw err;
     }
+    // Seguridad: la app NUNCA habla directo con Google
+    if (/script\.google\.com|macros\/s\//i.test(String(url))) {
+      const err = new Error('Use el proxy seguro /api (no la URL de Google)');
+      err.code = 'INSECURE_URL';
+      throw err;
+    }
   },
 
   _isSameOriginProxy(url) {

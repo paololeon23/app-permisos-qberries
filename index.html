@@ -185,13 +185,13 @@
         <div class="card">
           <h2 class="card-title"><i data-lucide="history"></i> Historial de subida</h2>
           <p class="helper">
-            Solo en este celular. Sin internet el pase queda <strong>Pendiente</strong> y
-            <strong>se sube solo</strong> cuando la app detecta conexión. Luego pasa a
-            <strong>Enviado</strong>.
+            Solo en este celular (máx. <strong>48 horas</strong>). Sin internet el pase queda
+            <strong>Pendiente</strong> y <strong>se sube solo</strong> al detectar conexión.
+            Luego pasa a <strong>Enviado</strong>. Lo del servidor no se borra.
           </p>
           <div id="historialSummary" hidden></div>
           <div id="historialList"></div>
-          <p class="app-version" id="appVersion" aria-label="Versión de la app">v1.1.1</p>
+          <p class="app-version" id="appVersion" aria-label="Versión de la app">v1.2.0</p>
         </div>
       </section>
     </main>
@@ -223,6 +223,9 @@
       </div>
       <footer class="pdf-sheet-foot">
         <button type="button" class="btn btn-secondary" id="pdfModalCancel">Cerrar</button>
+        <button type="button" class="btn btn-whatsapp" id="pdfModalWhatsapp" disabled>
+          WhatsApp
+        </button>
         <button type="button" class="btn btn-primary" id="pdfModalDownload" disabled>Descargar PDF</button>
       </footer>
     </div>

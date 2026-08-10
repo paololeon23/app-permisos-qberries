@@ -1,9 +1,6 @@
 /**
- * Proxy gratis Netlify → Apps Script TRABAJADORES
- *
- * Variables de entorno Netlify:
- *   TRABAJADORES_SCRIPT_URL = https://script.google.com/macros/s/.../exec
- *   API_TOKEN               = (mismo token que en Apps Script)
+ * Proxy Netlify → Apps Script TRABAJADORES (seguro)
+ * App móvil solo consulta por DNI / búsqueda puntual (no listado masivo ni escrituras).
  */
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -11,6 +8,9 @@ const CORS = {
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
   'Cache-Control': 'no-store',
 };
+
+const ALLOW_GET = new Set(['ping', 'obtenerPorDni', 'buscarTrabajador', 'contarTrabajadores']);
+const ALLOW_POST = new Set(['obtenerPorDni', 'buscarTrabajador']);
 
 function json(statusCode, body) {
   return {
@@ -20,35 +20,49 @@ function json(statusCode, body) {
   };
 }
 
+async function forwardGoogle(url, opts) {
+  const res = await fetch(url, { redirect: 'follow', ...opts });
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = {
+      ok: false,
+      code: 'BAD_UPSTREAM',
+      message: 'Respuesta inválida del servidor',
+      raw: String(text).slice(0, 180),
+    };
+  }
+  return { res, data };
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: CORS, body: '' };
   }
 
   const scriptUrl = process.env.TRABAJADORES_SCRIPT_URL;
-  const token = process.env.API_TOKEN || '';
+  const token = String(process.env.API_TOKEN || '').trim();
 
   if (!scriptUrl) {
-    return json(500, {
-      ok: false,
-      code: 'NO_CONFIG',
-      message: 'Falta TRABAJADORES_SCRIPT_URL en variables de Netlify',
-    });
+    return json(500, { ok: false, code: 'NO_CONFIG', message: 'Falta TRABAJADORES_SCRIPT_URL' });
+  }
+  if (!token) {
+    return json(500, { ok: false, code: 'NO_CONFIG', message: 'Falta API_TOKEN en Netlify' });
   }
 
   try {
     if (event.httpMethod === 'GET') {
       const qs = new URLSearchParams(event.queryStringParameters || {});
-      if (token) qs.set('token', token);
-      const url = scriptUrl + (scriptUrl.includes('?') ? '&' : '?') + qs.toString();
-      const res = await fetch(url, { redirect: 'follow' });
-      const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = { ok: false, message: 'Respuesta inválida del servidor Google', raw: text.slice(0, 200) };
+      const action = String(qs.get('action') || 'ping').trim();
+      if (!ALLOW_GET.has(action)) {
+        return json(403, { ok: false, code: 'FORBIDDEN', message: 'Acción no permitida: ' + action });
       }
+      qs.set('action', action);
+      qs.set('token', token);
+      const url = scriptUrl + (scriptUrl.includes('?') ? '&' : '?') + qs.toString();
+      const { res, data } = await forwardGoogle(url, { method: 'GET' });
       return json(res.ok ? 200 : 502, data);
     }
 
@@ -59,21 +73,19 @@ exports.handler = async (event) => {
       } catch {
         body = {};
       }
-      if (token) body.token = token;
-
-      const res = await fetch(scriptUrl, {
-        method: 'POST',
-        redirect: 'follow',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(body),
-      });
-      const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = { ok: false, message: 'Respuesta inválida del servidor Google', raw: text.slice(0, 200) };
+      const action = String(body.action || '').trim();
+      if (!ALLOW_POST.has(action)) {
+        return json(403, { ok: false, code: 'FORBIDDEN', message: 'Acción no permitida: ' + action });
       }
+      const safe = { ...body, action, token };
+      delete safe.apiToken;
+      delete safe.API_TOKEN;
+
+      const { res, data } = await forwardGoogle(scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(safe),
+      });
       return json(res.ok ? 200 : 502, data);
     }
 

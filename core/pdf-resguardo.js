@@ -428,6 +428,7 @@ AV.pdf = {
     var loading = document.getElementById('pdfLoading');
     var preview = document.getElementById('pdfPreview');
     var dl = document.getElementById('pdfModalDownload');
+    var wa = document.getElementById('pdfModalWhatsapp');
     if (!modal) return null;
 
     if (loading) {
@@ -440,11 +441,12 @@ AV.pdf = {
       preview.innerHTML = '';
     }
     if (dl) dl.disabled = true;
+    if (wa) wa.disabled = true;
 
     modal.hidden = false;
     modal.classList.add('is-open');
     document.body.classList.add('pdf-modal-open');
-    return { modal: modal, loading: loading, preview: preview, dl: dl };
+    return { modal: modal, loading: loading, preview: preview, dl: dl, wa: wa };
   },
 
   _closeModal() {
@@ -459,6 +461,55 @@ AV.pdf = {
       modal.hidden = true;
     }
     document.body.classList.remove('pdf-modal-open');
+  },
+
+  _whatsappText(p) {
+    p = p || {};
+    var fecha = AV.fmtDate ? AV.fmtDate(p.fechaSalida) : p.fechaSalida || '-';
+    var hora = AV.fmtTime12 ? AV.fmtTime12(p.horaSalida) : p.horaSalida || '-';
+    return (
+      '*Pase de salida · Q Berries*\n' +
+      'DNI: ' + (p.dni || '-') + '\n' +
+      'Nombre: ' + (p.nombres || '-') + '\n' +
+      'Motivo: ' + (p.motivo || '-') + '\n' +
+      'Salida: ' + fecha + ' ' + hora + '\n' +
+      'Responsable: ' + (p.responsable || '-')
+    );
+  },
+
+  async shareWhatsApp() {
+    var built = this._currentBuilt;
+    if (!built || !built.blob) {
+      AV.toast('warning', 'PDF', 'Espere a que se genere el documento');
+      return;
+    }
+    var name = this.safe(built.filename || 'pase-salida.pdf').replace(/\s+/g, '_');
+    if (!/\.pdf$/i.test(name)) name += '.pdf';
+    var text = this._whatsappText(this._currentPermiso || {});
+
+    try {
+      var file = new File([built.blob], name, { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Pase de salida Q Berries',
+          text: text,
+        });
+        AV.toast('success', 'WhatsApp', 'Elija WhatsApp en el menú compartir');
+        return;
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      console.warn('[pdf] share file', e);
+    }
+
+    // Fallback: descarga el PDF + abre WhatsApp con el resumen
+    try {
+      this._downloadAnchor(built.blob, name);
+    } catch (_) {}
+    var waUrl = 'https://wa.me/?text=' + encodeURIComponent(text + '\n\n(Adjunte el PDF descargado)');
+    window.open(waUrl, '_blank', 'noopener');
+    AV.toast('info', 'WhatsApp', 'Se descargó el PDF; adjúntelo en el chat');
   },
 
   _bindModalOnce() {
@@ -476,6 +527,7 @@ AV.pdf = {
     var cancelBtn = document.getElementById('pdfModalCancel');
     var overlay = document.getElementById('pdfModal');
     var dlBtn = document.getElementById('pdfModalDownload');
+    var waBtn = document.getElementById('pdfModalWhatsapp');
     if (closeBtn) closeBtn.addEventListener('click', close);
     if (cancelBtn) cancelBtn.addEventListener('click', close);
     if (overlay) {
@@ -491,11 +543,15 @@ AV.pdf = {
             self._previewResolve({ downloaded: true });
             self._previewResolve = null;
           }
-          // No cerrar de inmediato en Android por si abre el menú Compartir
           setTimeout(function () {
             self._closeModal();
           }, 250);
         }
+      });
+    }
+    if (waBtn) {
+      waBtn.addEventListener('click', function () {
+        self.shareWhatsApp();
       });
     }
     document.addEventListener('keydown', function (e) {
@@ -514,15 +570,26 @@ AV.pdf = {
   preview(permiso) {
     var self = this;
     this._bindModalOnce();
+    this._currentPermiso = permiso || null;
     var ui = this._openModalShell();
 
     var dniKey = String((permiso && permiso.dni) || '');
+    if (!dniKey || dniKey.length < 8) {
+      if (ui && ui.loading) {
+        ui.loading.hidden = false;
+        ui.loading.textContent = 'Ingrese un DNI válido';
+        ui.loading.classList.add('is-err');
+      }
+      return Promise.resolve({ downloaded: false });
+    }
+
     var sig = this._fingerprint(permiso);
     var built = null;
     if (this._prefetch && this._prefetch.sig === sig && this._prefetch.url) {
       built = this._prefetch;
     } else if (this._prefetch && this._prefetch.dni === dniKey && this._prefetch.url) {
-      built = this._prefetch;
+      // Solo reutilizar si huella coincide lo suficiente; si no, regenerar
+      if (this._prefetch.sig === sig) built = this._prefetch;
     }
 
     return new Promise(function (resolve) {
@@ -531,12 +598,14 @@ AV.pdf = {
       var showBuilt = function (b) {
         if (!b || !ui) return;
         self._currentBuilt = b;
+        self._currentPermiso = permiso || self._currentPermiso;
         if (ui.preview) {
           ui.preview.innerHTML = self._renderPreviewHtml(permiso);
           ui.preview.hidden = false;
         }
         if (ui.loading) ui.loading.hidden = true;
         if (ui.dl) ui.dl.disabled = false;
+        if (ui.wa) ui.wa.disabled = false;
       };
 
       // Mostrar HTML al toque (aunque el PDF aún se genere)
@@ -576,6 +645,12 @@ AV.pdf = {
           }
         });
     });
+  },
+
+  /** Limpia prefetch para no mostrar PDF de otra persona */
+  clearPrefetch() {
+    this._prefetch = null;
+    this._currentBuilt = null;
   },
 
   /** Prefetch en segundo plano al encontrar DNI */

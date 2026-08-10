@@ -80,9 +80,11 @@ AV.pwa = {
     if (!AV.queue) return;
 
     AV.queue.recoverStuck();
+    AV.queue.pruneLocalHistory?.(48);
     const pending = AV.queue.pendingCount();
     if (!pending) {
       this.updateQueuePill();
+      document.dispatchEvent(new CustomEvent('av:historial-changed'));
       return;
     }
 
@@ -90,7 +92,15 @@ AV.pwa = {
     this._syncing = true;
 
     try {
-      // Hasta 3 intentos: a veces el DNS/red aún no responde al primer "online"
+      // Verificar red real contra el proxy (no solo navigator.onLine)
+      const probe = await AV.api.ping();
+      if (!probe || probe.ok !== true || probe.api !== 'permisos') {
+        console.warn('[auto-sync] ping falló', reason, probe);
+        this.updateNetPill();
+        this.updateQueuePill();
+        return;
+      }
+
       let last = { sent: 0, failed: 0, error: '' };
       for (let attempt = 1; attempt <= 3; attempt++) {
         if (!navigator.onLine) break;
@@ -99,6 +109,7 @@ AV.pwa = {
 
         last = await AV.queue.flush();
         if (last.sent > 0 && AV.queue.pendingCount() === 0) break;
+        if (last.error && /no autorizado|UNAUTHORIZED|WRONG_API/i.test(last.error)) break;
         if (attempt < 3 && (last.failed || AV.queue.pendingCount() > 0)) {
           await new Promise((r) => setTimeout(r, 1500 * attempt));
         }
@@ -146,8 +157,12 @@ window.addEventListener('offline', () => {
 });
 
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && navigator.onLine) {
-    AV.pwa.scheduleAutoSync('visible', 500);
+  if (document.visibilityState === 'visible') {
+    AV.pwa.updateNetPill();
+    AV.queue?.pruneLocalHistory?.(48);
+    AV.pwa.updateQueuePill();
+    if (navigator.onLine) AV.pwa.scheduleAutoSync('visible', 500);
+    document.dispatchEvent(new CustomEvent('av:historial-changed'));
   }
 });
 

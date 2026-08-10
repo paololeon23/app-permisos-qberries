@@ -137,7 +137,30 @@ AV.queue = {
     return pending.concat(synced.slice(0, 300));
   },
 
+  /** Borra del celular historial con más de 48h (NO borra en Sheets). Conserva pendientes. */
+  pruneLocalHistory(maxHours = 48) {
+    const maxMs = Math.max(1, Number(maxHours) || 48) * 60 * 60 * 1000;
+    const now = Date.now();
+    const h = this.history();
+    const next = h.filter((p) => {
+      const status = p.syncStatus || 'pending';
+      // Pendientes: se quedan hasta enviarse
+      if (status !== 'synced') return true;
+      const when = p._savedAt || p.createdAt || p.fechaRegistro || '';
+      const t = when ? new Date(when).getTime() : NaN;
+      if (!Number.isFinite(t)) return true;
+      return now - t <= maxMs;
+    });
+    if (next.length !== h.length) {
+      AV.storage.set(this.histKey(), next);
+      document.dispatchEvent(new CustomEvent('av:historial-changed'));
+      return h.length - next.length;
+    }
+    return 0;
+  },
+
   addHistory(item) {
+    this.pruneLocalHistory(48);
     const h = this.history();
     const id = String(item?.id || '').trim();
     const dni = String(item?.dni || '').trim();
@@ -254,7 +277,6 @@ AV.queue = {
             45000
           );
 
-          // Confirmar respuesta real
           if (!res || res.opaque) {
             throw Object.assign(new Error('Sin confirmación del servidor'), { code: 'NO_CONFIRM' });
           }
@@ -265,6 +287,9 @@ AV.queue = {
               sent++;
               continue;
             }
+            if (res.code === 'UNAUTHORIZED' || /no autorizado/i.test(res.message || '')) {
+              throw Object.assign(new Error(res.message || 'No autorizado'), { code: 'UNAUTHORIZED' });
+            }
             throw Object.assign(new Error(res.message || 'Error API'), { code: res.code || 'API_ERROR' });
           }
           if (res.api && res.api !== 'permisos') {
@@ -273,8 +298,7 @@ AV.queue = {
               { code: 'WRONG_API' }
             );
           }
-          // ok sin api pero con id/data también vale
-          if (!(res.id || res.data?.id || res.api === 'permisos' || res.ok === true)) {
+          if (!(res.id || res.data?.id || (res.ok === true && res.api === 'permisos'))) {
             throw Object.assign(new Error('Respuesta inválida del servidor'), { code: 'NO_CONFIRM' });
           }
 
@@ -297,6 +321,10 @@ AV.queue = {
           failed++;
           lastError = e.message || String(e);
           console.warn('[queue] sync fail', e);
+          // Auth/config: no seguir intentando el resto en este ciclo
+          if (e.code === 'UNAUTHORIZED' || e.code === 'WRONG_API' || e.code === 'INSECURE_URL') {
+            break;
+          }
         }
       }
     } finally {

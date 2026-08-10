@@ -1,39 +1,57 @@
 /**
- * API de permisos (POST crear / GET listar)
+ * API de permisos (POST crear vía proxy seguro /api/permisos)
  */
 window.AV = window.AV || {};
 
 AV.api = {
-  async crearPermiso(data) {
-    const url = API_CONFIG.PERMISOS_URL;
-    const res = await AV.network.post(url, { action: 'crearPermiso', data });
+  _assertPermisosRes(res) {
     if (res && res.ok === false) {
       const err = new Error(res.message || 'No se pudo registrar');
       err.code = res.code || 'API_ERROR';
       err.data = res;
       throw err;
     }
-    // Exige confirmación real del servidor (con id)
-    if (!res || res.opaque || !(res.id || res.data?.id || res.ok === true)) {
+    if (!res || res.opaque) {
       const err = new Error('El servidor no confirmó el registro');
       err.code = 'NO_CONFIRM';
       throw err;
     }
-    // Si respondió con forma de "trabajadores" (count sin id de permiso), incorrecto
-    if (res.api && res.api !== 'permisos' && !res.id && !res.data?.id) {
-      const err = new Error('URL de API incorrecta: no es la de permisos. Vuelve a implementar el code.gs en BD-PERMISOS.');
+    if (res.code === 'UNAUTHORIZED' || /no autorizado/i.test(res.message || '')) {
+      const err = new Error('No autorizado. Revise la configuración del servidor.');
+      err.code = 'UNAUTHORIZED';
+      throw err;
+    }
+    if (res.api && res.api !== 'permisos') {
+      const err = new Error('Respuesta inválida: no es la API de permisos');
       err.code = 'WRONG_API';
+      throw err;
+    }
+    if (!(res.id || res.data?.id || (res.ok === true && res.api === 'permisos'))) {
+      const err = new Error('El servidor no confirmó el registro');
+      err.code = 'NO_CONFIRM';
       throw err;
     }
     return res;
   },
 
+  async crearPermiso(data) {
+    const url = API_CONFIG.PERMISOS_URL;
+    const res = await AV.network.post(url, { action: 'crearPermiso', data });
+    return this._assertPermisosRes(res);
+  },
+
+  async ping() {
+    try {
+      return await AV.network.get(API_CONFIG.PERMISOS_URL, { action: 'ping' });
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+
   async listarPermisos() {
-    // No usar GET todavía — historial solo local
     return { ok: true, data: AV.queue.history(), localOnly: true };
   },
 
-  /** Duplicados: solo historial/cola local (sin GET al servidor) */
   async existePaseHoy(dni, fecha) {
     const day = fecha || AV.today();
     const local = AV.queue.findPaseHoy(dni, day);
@@ -41,8 +59,7 @@ AV.api = {
   },
 
   /**
-   * Guarda permiso: online → POST; offline / fallo → cola local
-   * Solo sube (POST). Sin GET.
+   * Guarda permiso: online → POST seguro; offline / fallo → cola local
    */
   async guardarPermiso(permiso) {
     const record = {
@@ -52,7 +69,6 @@ AV.api = {
       device: navigator.userAgent.slice(0, 120),
     };
 
-    // Duplicado local del mismo día
     if (AV.queue.findPaseHoy(record.dni)) {
       const err = new Error('Este trabajador ya tiene un pase de salida hoy en este dispositivo.');
       err.code = 'DUPLICATE';
@@ -66,15 +82,21 @@ AV.api = {
 
     try {
       const res = await this.crearPermiso(record);
-      AV.queue.addHistory({ ...record, syncStatus: 'synced', remoteId: res?.id || res?.data?.id });
+      AV.queue.addHistory({
+        ...record,
+        syncStatus: 'synced',
+        remoteId: res?.id || res?.data?.id,
+      });
       return { ok: true, offline: false, data: record, remote: res };
     } catch (e) {
       if (e.code === 'DUPLICATE' || /ya (tiene|registr[oó])/i.test(e.message || '')) {
-        // Ya quedó en el servidor: historial como enviado, sin encolar
         AV.queue.addHistory({ ...record, syncStatus: 'synced' });
         throw e;
       }
-      // Sin red o fallo → cola (sin duplicar si ya está)
+      // Errores de auth/config: no encolar como si fuera "offline ok"
+      if (e.code === 'UNAUTHORIZED' || e.code === 'INSECURE_URL' || e.code === 'WRONG_API') {
+        throw e;
+      }
       const queued = AV.queue.enqueue(record);
       return { ok: true, offline: true, data: queued || record, error: e.message };
     }

@@ -1,10 +1,8 @@
 /**
- * Proxy gratis Netlify → Apps Script PERMISOS
- * El celular NO ve la URL de Google ni el token.
- *
- * En Netlify → Site settings → Environment variables:
- *   PERMISOS_SCRIPT_URL = https://script.google.com/macros/s/.../exec
- *   API_TOKEN           = (mismo token que en Apps Script)
+ * Proxy Netlify → Apps Script PERMISOS (seguro)
+ * - Token solo desde env Netlify (el cliente NUNCA lo impone)
+ * - Solo acciones permitidas
+ * - URL de Google solo en el servidor
  */
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -12,6 +10,9 @@ const CORS = {
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
   'Cache-Control': 'no-store',
 };
+
+const ALLOW_GET = new Set(['ping', 'listarPermisos', 'existePaseHoy', 'obtenerPermiso']);
+const ALLOW_POST = new Set(['crearPermiso', 'guardarPermiso', 'listarPermisos']);
 
 function json(statusCode, body) {
   return {
@@ -21,35 +22,49 @@ function json(statusCode, body) {
   };
 }
 
+async function forwardGoogle(url, opts) {
+  const res = await fetch(url, { redirect: 'follow', ...opts });
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = {
+      ok: false,
+      code: 'BAD_UPSTREAM',
+      message: 'Respuesta inválida del servidor',
+      raw: String(text).slice(0, 180),
+    };
+  }
+  return { res, data };
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: CORS, body: '' };
   }
 
   const scriptUrl = process.env.PERMISOS_SCRIPT_URL;
-  const token = process.env.API_TOKEN || '';
+  const token = String(process.env.API_TOKEN || '').trim();
 
   if (!scriptUrl) {
-    return json(500, {
-      ok: false,
-      code: 'NO_CONFIG',
-      message: 'Falta PERMISOS_SCRIPT_URL en variables de Netlify',
-    });
+    return json(500, { ok: false, code: 'NO_CONFIG', message: 'Falta PERMISOS_SCRIPT_URL' });
+  }
+  if (!token) {
+    return json(500, { ok: false, code: 'NO_CONFIG', message: 'Falta API_TOKEN en Netlify' });
   }
 
   try {
     if (event.httpMethod === 'GET') {
       const qs = new URLSearchParams(event.queryStringParameters || {});
-      if (token) qs.set('token', token);
-      const url = scriptUrl + (scriptUrl.includes('?') ? '&' : '?') + qs.toString();
-      const res = await fetch(url, { redirect: 'follow' });
-      const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = { ok: false, message: 'Respuesta inválida del servidor Google', raw: text.slice(0, 200) };
+      const action = String(qs.get('action') || 'ping').trim();
+      if (!ALLOW_GET.has(action)) {
+        return json(403, { ok: false, code: 'FORBIDDEN', message: 'Acción no permitida: ' + action });
       }
+      qs.set('action', action);
+      qs.set('token', token); // siempre server token
+      const url = scriptUrl + (scriptUrl.includes('?') ? '&' : '?') + qs.toString();
+      const { res, data } = await forwardGoogle(url, { method: 'GET' });
       return json(res.ok ? 200 : 502, data);
     }
 
@@ -60,21 +75,30 @@ exports.handler = async (event) => {
       } catch {
         body = {};
       }
-      if (token) body.token = token;
-
-      const res = await fetch(scriptUrl, {
-        method: 'POST',
-        redirect: 'follow',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(body),
-      });
-      const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = { ok: false, message: 'Respuesta inválida del servidor Google', raw: text.slice(0, 200) };
+      const action = String(body.action || 'crearPermiso').trim();
+      if (!ALLOW_POST.has(action)) {
+        return json(403, { ok: false, code: 'FORBIDDEN', message: 'Acción no permitida: ' + action });
       }
+      // Sanitizar: forzar action + token del servidor
+      const safe = {
+        action,
+        data: body.data != null ? body.data : body,
+        token,
+      };
+      // Evitar que "data" contenga token / action raros del cliente
+      if (safe.data && typeof safe.data === 'object' && !Array.isArray(safe.data)) {
+        const d = { ...safe.data };
+        delete d.token;
+        delete d.apiToken;
+        delete d.API_TOKEN;
+        safe.data = d;
+      }
+
+      const { res, data } = await forwardGoogle(scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(safe),
+      });
       return json(res.ok ? 200 : 502, data);
     }
 

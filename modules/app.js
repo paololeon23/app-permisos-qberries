@@ -31,6 +31,7 @@
     // Recuperar cola/historial aunque se haya cerrado la app
     try {
       await AV.storage.hydrate();
+      AV.queue.pruneLocalHistory(48);
     } catch (e) {
       console.warn('[boot] hydrate', e);
     }
@@ -40,7 +41,7 @@
     AV.pwa.maybeShowInstallHint();
     AV.pwa.lockZoom();
     const ver = document.getElementById('appVersion');
-    if (ver) ver.textContent = 'v' + (window.API_CONFIG?.APP_VERSION || '1.0.4');
+    if (ver) ver.textContent = 'v' + (window.API_CONFIG?.APP_VERSION || '1.2.0');
     await AV.pwa.register();
 
     AV.registro.init();
