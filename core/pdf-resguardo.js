@@ -106,6 +106,22 @@ AV.pdf = {
   _downloadBlob(blob, filename) {
     var name = this.safe(filename).replace(/\s+/g, '_');
     if (!/\.pdf$/i.test(name)) name += '.pdf';
+
+    // Android: compartir archivo suele funcionar mejor que <a download>
+    try {
+      var file = new File([blob], name, { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], title: 'Pase de salida', text: name }).catch(function () {
+          AV.pdf._downloadAnchor(blob, name);
+        });
+        return;
+      }
+    } catch (_) {}
+
+    this._downloadAnchor(blob, name);
+  },
+
+  _downloadAnchor(blob, name) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
@@ -119,6 +135,82 @@ AV.pdf = {
         URL.revokeObjectURL(url);
       } catch (_) {}
     }, 60000);
+  },
+
+  _field(label, value) {
+    return (
+      '<div class="pdf-field"><label>' +
+      AV.escape(label) +
+      '</label><span>' +
+      AV.escape(value == null || value === '' ? '-' : value) +
+      '</span></div>'
+    );
+  },
+
+  /** Vista previa HTML (Android no muestra PDF en iframe) */
+  _renderPreviewHtml(permiso) {
+    var p = permiso || {};
+    var motivo = this.safe(p.motivo || '-');
+    if (p.motivoDetalle && /^otro/i.test(motivo)) {
+      motivo = 'Otro: ' + this.safe(p.motivoDetalle);
+    }
+    var logo = './assets/logo-qberries.png';
+    var carnet = p.carnetVerificado
+      ? '<div class="pdf-carnet is-ok"><strong>CARNET VERIFICADO POR QR</strong><br>DNI ' +
+        AV.escape(p.carnetDniEscaneado || p.dni || '') +
+        (p.carnetVerificadoAt ? ' · ' + AV.escape(p.carnetVerificadoAt) : '') +
+        '</div>'
+      : '<div class="pdf-carnet is-wait"><strong>Pendiente de verificación de carnet</strong></div>';
+
+    var cuando = '-';
+    try {
+      cuando = new Date(p.createdAt || Date.now()).toLocaleString('es-PE');
+    } catch (_) {}
+
+    return (
+      '<article class="pdf-doc">' +
+      '<div class="pdf-doc-top">' +
+      '<img src="' +
+      logo +
+      '" alt="Q Berries" />' +
+      '<div class="pdf-doc-brand"><p class="co">Q BERRIES</p><p class="ti">PASE DE SALIDA</p></div>' +
+      '</div>' +
+      '<div class="pdf-sec">DATOS DEL TRABAJADOR</div>' +
+      '<div class="pdf-grid">' +
+      this._field('DNI', p.dni) +
+      this._field('Apellidos y nombres', p.nombres) +
+      this._field('Cargo', p.cargo) +
+      this._field('F. Ingreso', AV.fmtDate ? AV.fmtDate(p.fIngreso) : p.fIngreso) +
+      '</div>' +
+      '<div class="pdf-sec">MOTIVO DEL PASE</div>' +
+      '<div class="pdf-motivo">' +
+      AV.escape(motivo) +
+      '</div>' +
+      '<div class="pdf-sec">SALIDA</div>' +
+      '<div class="pdf-grid">' +
+      this._field('Fecha salida', AV.fmtDate ? AV.fmtDate(p.fechaSalida) : p.fechaSalida) +
+      this._field('Hora de salida', AV.fmtTime12 ? AV.fmtTime12(p.horaSalida) : p.horaSalida) +
+      '</div>' +
+      '<div class="pdf-sec">RESPONSABLE QUE AUTORIZA</div>' +
+      '<div class="pdf-grid">' +
+      this._field('Responsable', p.responsable || '-') +
+      this._field('DNI', p.dniResponsable || '-') +
+      this._field('Puesto', p.puestoResponsable || '-') +
+      '</div>' +
+      (p.observacion
+        ? '<div class="pdf-sec">OBSERVACIÓN</div><div class="pdf-field"><span>' +
+          AV.escape(p.observacion) +
+          '</span></div>'
+        : '') +
+      '<div class="pdf-sec">VERIFICACIÓN DE CARNET</div>' +
+      carnet +
+      '<div class="pdf-foot"><span>Generado: ' +
+      AV.escape(cuando) +
+      '</span><span>' +
+      AV.escape(p.syncStatus === 'synced' ? 'Estado: enviado' : 'Vista previa') +
+      '</span></div>' +
+      '</article>'
+    );
   },
 
   /** Construye el PDF formal y devuelve blob + url */
@@ -334,37 +426,33 @@ AV.pdf = {
   _openModalShell() {
     var modal = document.getElementById('pdfModal');
     var loading = document.getElementById('pdfLoading');
-    var frame = document.getElementById('pdfFrame');
+    var preview = document.getElementById('pdfPreview');
     var dl = document.getElementById('pdfModalDownload');
     if (!modal) return null;
 
     if (loading) {
       loading.hidden = false;
       loading.classList.remove('is-err');
-      loading.textContent = 'Cargando PDF…';
+      loading.textContent = 'Generando vista previa…';
     }
-    if (frame) {
-      frame.hidden = true;
-      try {
-        frame.removeAttribute('src');
-      } catch (_) {}
+    if (preview) {
+      preview.hidden = true;
+      preview.innerHTML = '';
     }
     if (dl) dl.disabled = true;
 
     modal.hidden = false;
     modal.classList.add('is-open');
     document.body.classList.add('pdf-modal-open');
-    return { modal: modal, loading: loading, frame: frame, dl: dl };
+    return { modal: modal, loading: loading, preview: preview, dl: dl };
   },
 
   _closeModal() {
     var modal = document.getElementById('pdfModal');
-    var frame = document.getElementById('pdfFrame');
-    if (frame) {
-      try {
-        frame.removeAttribute('src');
-      } catch (_) {}
-      frame.hidden = true;
+    var preview = document.getElementById('pdfPreview');
+    if (preview) {
+      preview.innerHTML = '';
+      preview.hidden = true;
     }
     if (modal) {
       modal.classList.remove('is-open');
@@ -403,7 +491,10 @@ AV.pdf = {
             self._previewResolve({ downloaded: true });
             self._previewResolve = null;
           }
-          self._closeModal();
+          // No cerrar de inmediato en Android por si abre el menú Compartir
+          setTimeout(function () {
+            self._closeModal();
+          }, 250);
         }
       });
     }
@@ -419,7 +510,7 @@ AV.pdf = {
     return [p.dni, p.nombres, p.motivo, p.fechaSalida, p.horaSalida, p.responsable, p.carnetVerificado].join('|');
   },
 
-  /** Vista previa: modal AL TOQUE, PDF enseguida */
+  /** Vista previa: modal AL TOQUE (HTML en celular; PDF listo para descargar) */
   preview(permiso) {
     var self = this;
     this._bindModalOnce();
@@ -440,13 +531,20 @@ AV.pdf = {
       var showBuilt = function (b) {
         if (!b || !ui) return;
         self._currentBuilt = b;
-        if (ui.frame) {
-          ui.frame.src = b.url + '#toolbar=0&view=FitH';
-          ui.frame.hidden = false;
+        if (ui.preview) {
+          ui.preview.innerHTML = self._renderPreviewHtml(permiso);
+          ui.preview.hidden = false;
         }
         if (ui.loading) ui.loading.hidden = true;
         if (ui.dl) ui.dl.disabled = false;
       };
+
+      // Mostrar HTML al toque (aunque el PDF aún se genere)
+      if (ui && ui.preview) {
+        ui.preview.innerHTML = self._renderPreviewHtml(permiso);
+        ui.preview.hidden = false;
+        if (ui.loading) ui.loading.hidden = true;
+      }
 
       if (built) {
         requestAnimationFrame(function () {
@@ -469,8 +567,11 @@ AV.pdf = {
         })
         .catch(function (err) {
           console.error('[pdf]', err);
+          // Igual se ve la vista previa HTML; solo falla el archivo descargable
+          if (ui && ui.dl) ui.dl.disabled = true;
           if (ui && ui.loading) {
-            ui.loading.textContent = 'No se pudo generar el PDF';
+            ui.loading.hidden = false;
+            ui.loading.textContent = 'Vista previa OK. No se pudo armar el archivo PDF.';
             ui.loading.classList.add('is-err');
           }
         });

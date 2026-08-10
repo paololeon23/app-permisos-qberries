@@ -1,11 +1,12 @@
 /* Service Worker — Pase de salida Q Berries
  * Offline-safe: siempre responde con un Response válido
  */
-const CACHE = 'av-permisos-v53';
+const CACHE = 'av-permisos-v55';
 
 const PRECACHE = [
   './',
   './index.html',
+  './abrir.html',
   './instalar.html',
   './imprimir-qr.html',
   './manifest.webmanifest',
