@@ -14,7 +14,20 @@
  *
  * ENDPOINTS
  *  POST { action: "crearPermiso", data: {...} }
- *  GET  ?action=listarPermisos&limit=100
+ *  GET  ?action=listarPermisos
+ *       Por defecto: SOLO HOY (Lima) — rápido
+ *       ?todas=1  → todas las fechas (botón "Todas las fechas")
+ *       ?fecha=YYYY-MM-DD → un día concreto
+ *       ?dni=… &limit=…
+ *       Respuesta:
+ *       {
+ *         ok, api, rango: { modo, fecha, todas },
+ *         count,
+ *         motivos: [{ motivo, count }],
+ *         topMotivo: { motivo, count } | null,
+ *         porDia: [{ fecha, count }],
+ *         data: [ ...filas ]
+ *       }
  *  GET  ?action=ping
  *
  * Usa «Hoja 1» (NO crea otra hoja)
@@ -75,8 +88,7 @@ function doGet(e) {
       });
     }
     if (action === 'listarPermisos') {
-      var rows = listarPermisos_(p);
-      return jsonOut_({ ok: true, api: 'permisos', data: rows, count: rows.length });
+      return jsonOut_(responderListado_(p));
     }
     if (action === 'obtenerPermiso') {
       var one = obtenerPermiso_(p.id);
@@ -101,7 +113,7 @@ function doPost(e) {
       return jsonOut_({ ok: true, api: 'permisos', id: saved.id, data: saved });
     }
     if (action === 'listarPermisos') {
-      return jsonOut_({ ok: true, data: listarPermisos_(body) });
+      return jsonOut_(responderListado_(body));
     }
     return jsonOut_({ ok: false, message: 'Acción POST no válida: ' + action });
   } catch (err) {
@@ -195,18 +207,12 @@ function existePaseHoy_(dni, fecha) {
   dni = clean_(dni);
   if (!dni) return null;
   var day = clean_(fecha) || hoyLima_();
-  var rows = listarPermisos_({ dni: dni, limit: 500 });
+  // Buscar ese día concreto (no "todas")
+  var rows = listarPermisos_({ dni: dni, fecha: day, limit: 500 });
   for (var i = 0; i < rows.length; i++) {
     var r = rows[i];
-    var fr = String(r.fechaRegistro || '').substring(0, 10);
-    var fs = String(r.fechaSalida || '').substring(0, 10);
-    // Normaliza posibles Date → string
-    if (Object.prototype.toString.call(r.fechaRegistro) === '[object Date]') {
-      fr = Utilities.formatDate(r.fechaRegistro, 'America/Lima', 'yyyy-MM-dd');
-    }
-    if (Object.prototype.toString.call(r.fechaSalida) === '[object Date]') {
-      fs = Utilities.formatDate(r.fechaSalida, 'America/Lima', 'yyyy-MM-dd');
-    }
+    var fr = fechaCelda_(r.fechaRegistro);
+    var fs = fechaCelda_(r.fechaSalida);
     if (fr === day || fs === day) return r;
   }
   return null;
@@ -216,6 +222,130 @@ function hoyLima_() {
   return Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
 }
 
+/** Normaliza celda fecha (Date o string) → yyyy-MM-dd */
+function fechaCelda_(v) {
+  if (v == null || v === '') return '';
+  if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) {
+    return Utilities.formatDate(v, 'America/Lima', 'yyyy-MM-dd');
+  }
+  var s = String(v).trim();
+  // ya yyyy-MM-dd
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+  // dd/mm/yyyy
+  var m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
+  if (m) {
+    return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+  }
+  return s.substring(0, 10);
+}
+
+/**
+ * ¿Pedir todas las fechas?
+ * todas=1 | todasFechas=1 | all=1
+ */
+function quiereTodasFechas_(params) {
+  params = params || {};
+  var v = String(
+    params.todas != null
+      ? params.todas
+      : params.todasFechas != null
+        ? params.todasFechas
+        : params.all != null
+          ? params.all
+          : ''
+  )
+    .trim()
+    .toLowerCase();
+  return v === '1' || v === 'true' || v === 'si' || v === 'sí' || v === 'yes';
+}
+
+/** Día activo del filtro (si no es "todas") */
+function fechaFiltro_(params) {
+  params = params || {};
+  var f = clean_(params.fecha);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(f)) return f;
+  return hoyLima_();
+}
+
+/**
+ * Respuesta rica para el panel de consulta:
+ * { count, motivos, topMotivo, porDia, data, rango }
+ */
+function responderListado_(params) {
+  params = params || {};
+  var todas = quiereTodasFechas_(params);
+  var fecha = todas ? '' : fechaFiltro_(params);
+  var rows = listarPermisos_({
+    dni: params.dni,
+    fecha: fecha,
+    todas: todas ? '1' : '',
+    limit: params.limit
+  });
+  var stats = statsPermisos_(rows);
+
+  return {
+    ok: true,
+    api: 'permisos',
+    rango: {
+      modo: todas ? 'todas' : 'dia',
+      fecha: todas ? null : fecha,
+      todas: todas
+    },
+    count: stats.count,
+    motivos: stats.motivos,
+    topMotivo: stats.topMotivo,
+    porDia: stats.porDia,
+    data: rows
+  };
+}
+
+/** Conteos: total, por motivo, top motivo, por día */
+function statsPermisos_(rows) {
+  rows = rows || [];
+  var byMotivo = {};
+  var byDia = {};
+  var i;
+  for (i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    var mot = clean_(r.motivo) || '(Sin motivo)';
+    byMotivo[mot] = (byMotivo[mot] || 0) + 1;
+
+    var day = fechaCelda_(r.fechaRegistro) || fechaCelda_(r.fechaSalida) || '(Sin fecha)';
+    byDia[day] = (byDia[day] || 0) + 1;
+  }
+
+  var motivos = Object.keys(byMotivo)
+    .map(function (k) {
+      return { motivo: k, count: byMotivo[k] };
+    })
+    .sort(function (a, b) {
+      return b.count - a.count;
+    });
+
+  var porDia = Object.keys(byDia)
+    .map(function (k) {
+      return { fecha: k, count: byDia[k] };
+    })
+    .sort(function (a, b) {
+      // fechas ISO: orden desc
+      if (a.fecha < b.fecha) return 1;
+      if (a.fecha > b.fecha) return -1;
+      return 0;
+    });
+
+  return {
+    count: rows.length,
+    motivos: motivos,
+    topMotivo: motivos.length ? { motivo: motivos[0].motivo, count: motivos[0].count } : null,
+    porDia: porDia
+  };
+}
+
+/**
+ * Lista filas del sheet.
+ * Por defecto SOLO EL DÍA (hoy Lima o params.fecha).
+ * Con params.todas=1 → todas las fechas.
+ */
 function listarPermisos_(params) {
   params = params || {};
   var sh = sheet_();
@@ -227,11 +357,18 @@ function listarPermisos_(params) {
   for (var i = 1; i < values.length; i++) {
     var obj = {};
     for (var c = 0; c < headers.length; c++) {
-      obj[headers[c]] = values[i][c];
+      var key = headers[c];
+      var val = values[i][c];
+      // Normalizar fechas en el objeto de salida
+      if (key === 'fechaRegistro' || key === 'fechaSalida') {
+        obj[key] = fechaCelda_(val) || clean_(val);
+      } else {
+        obj[key] = val;
+      }
     }
     out.push(obj);
   }
-  out.reverse();
+  out.reverse(); // más recientes primero
 
   var dni = clean_(params.dni);
   if (dni) {
@@ -240,15 +377,28 @@ function listarPermisos_(params) {
     });
   }
 
+  var todas = quiereTodasFechas_(params);
+  if (!todas) {
+    var day = fechaFiltro_(params);
+    out = out.filter(function (r) {
+      var fr = fechaCelda_(r.fechaRegistro);
+      var fs = fechaCelda_(r.fechaSalida);
+      return fr === day || fs === day;
+    });
+  }
+
   var limit = parseInt(params.limit, 10);
-  if (!limit || limit < 1) limit = 100;
+  if (!limit || limit < 1) {
+    limit = todas ? 2000 : 500;
+  }
+  if (limit > 5000) limit = 5000;
   return out.slice(0, limit);
 }
 
 function obtenerPermiso_(id) {
   id = clean_(id);
   if (!id) return null;
-  var rows = listarPermisos_({ limit: 5000 });
+  var rows = listarPermisos_({ limit: 5000, todas: '1' });
   for (var i = 0; i < rows.length; i++) {
     if (String(rows[i].id) === id) return rows[i];
   }
@@ -363,5 +513,17 @@ function myFunction() {
 /** Prueba rápida: debe imprimir {"ok":true,"api":"permisos",...} */
 function testPing() {
   var out = doGet({ parameter: { action: 'ping' } }).getContent();
+  Logger.log(out);
+}
+
+/** Prueba listado de HOY con stats */
+function testListarHoy() {
+  var out = doGet({ parameter: { action: 'listarPermisos' } }).getContent();
+  Logger.log(out);
+}
+
+/** Prueba todas las fechas */
+function testListarTodas() {
+  var out = doGet({ parameter: { action: 'listarPermisos', todas: '1', limit: '50' } }).getContent();
   Logger.log(out);
 }

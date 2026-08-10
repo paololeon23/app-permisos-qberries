@@ -9,6 +9,7 @@
   "background_color": "#ffffff",
   "theme_color": "#1b6b3a",
   "lang": "es-PE",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "./icons/icon-192.png",

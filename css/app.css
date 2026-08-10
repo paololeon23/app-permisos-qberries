@@ -1071,6 +1071,15 @@ body.pdf-modal-open {
   box-shadow: var(--shadow) !important;
   font-family: var(--font) !important;
   border: 1px solid var(--line) !important;
+  z-index: 80 !important;
+}
+
+.flatpickr-calendar.open {
+  display: inline-block;
+}
+
+.flatpickr-calendar:not(.open) {
+  display: none !important;
 }
 
 .hora-modal {

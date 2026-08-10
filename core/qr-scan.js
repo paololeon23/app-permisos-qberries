@@ -48,12 +48,14 @@ AV.qr = {
     if (this._busy) return;
     if (typeof Html5Qrcode === 'undefined') {
       AV.toast('error', 'Escáner', 'Librería no cargada. Recargue la app.');
+      AV.voice?.speak?.('Error. Librería del escáner no cargada', { force: true });
       return;
     }
 
     const expected = String(expectedDni || '').replace(/\D/g, '');
     if (expected.length < 8) {
       AV.toast('warning', 'DNI requerido', 'Primero ingrese el DNI del trabajador');
+      AV.voice?.dniRequerido?.();
       return;
     }
 
@@ -80,6 +82,7 @@ AV.qr = {
       customClass: { popup: 'swal-scan' },
       didOpen: async () => {
         const feedback = document.getElementById('scanFeedback');
+        AV.voice?.escanerListo?.();
         try {
           this._scanner = new Html5Qrcode('qrReader');
           await this._scanner.start(
@@ -93,6 +96,7 @@ AV.qr = {
                   feedback.textContent = 'QR leído, pero no se encontró un DNI válido';
                   feedback.className = 'scan-feedback is-warn';
                 }
+                AV.voice?.qrSinDni?.();
                 return;
               }
               if (dni !== expected) {
@@ -100,6 +104,7 @@ AV.qr = {
                   feedback.textContent = `Carnet DNI ${dni} no coincide con ${expected}`;
                   feedback.className = 'scan-feedback is-err';
                 }
+                AV.voice?.dniNoCoincide?.();
                 return;
               }
 
@@ -108,7 +113,6 @@ AV.qr = {
                 feedback.textContent = 'DNI validado';
                 feedback.className = 'scan-feedback is-ok';
               }
-              // Voz local: funciona con o sin internet
               AV.voice?.dniValidado?.();
               try {
                 await this.stop();
@@ -126,6 +130,7 @@ AV.qr = {
               'No se pudo abrir la cámara. Permita el acceso e intente de nuevo.';
             feedback.className = 'scan-feedback is-err';
           }
+          AV.voice?.camaraError?.();
         }
       },
       willClose: async () => {

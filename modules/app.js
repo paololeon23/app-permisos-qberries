@@ -3,6 +3,9 @@
  */
 (() => {
   const switchTab = (name) => {
+    try {
+      AV.registro?.closeCalendars?.();
+    } catch (_) {}
     document.querySelectorAll('.panel').forEach((p) => {
       p.classList.toggle('is-active', p.dataset.panel === name);
     });
@@ -37,7 +40,7 @@
     AV.pwa.maybeShowInstallHint();
     AV.pwa.lockZoom();
     const ver = document.getElementById('appVersion');
-    if (ver) ver.textContent = 'v' + (window.API_CONFIG?.APP_VERSION || '1.0.3');
+    if (ver) ver.textContent = 'v' + (window.API_CONFIG?.APP_VERSION || '1.0.4');
     await AV.pwa.register();
 
     AV.registro.init();

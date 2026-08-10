@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QR instalación · Pase de salida Q Berries</title>
+  <style>
+    :root {
+      --brand: #1b6b3a;
+      --ink: #1a2330;
+      --muted: #6b7785;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: var(--ink);
+      background: #f4f7f5;
+      padding: 24px 16px 40px;
+    }
+    .sheet {
+      width: min(520px, 100%);
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid #e2e8ee;
+      border-radius: 16px;
+      padding: 28px 22px;
+      text-align: center;
+    }
+    .kicker {
+      margin: 0;
+      color: #c43b4e;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    h1 { margin: 8px 0 6px; font-size: 1.5rem; }
+    .sub { margin: 0 0 18px; color: var(--muted); line-height: 1.45; }
+    .qr {
+      width: min(320px, 86vw);
+      height: auto;
+      border: 10px solid #fff;
+      outline: 1px solid #dde3ea;
+      border-radius: 8px;
+      background: #fff;
+    }
+    .url {
+      margin: 14px 0 0;
+      font-size: 0.82rem;
+      word-break: break-all;
+      color: var(--brand);
+      font-weight: 600;
+    }
+    .steps {
+      text-align: left;
+      margin: 20px 0 0;
+      padding: 14px 16px;
+      border-radius: 10px;
+      background: #f7faf8;
+      border: 1px solid #e2e8ee;
+      font-size: 0.92rem;
+      line-height: 1.5;
+    }
+    .actions {
+      margin-top: 18px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    button, a.btn {
+      appearance: none;
+      border: none;
+      border-radius: 10px;
+      min-height: 44px;
+      padding: 0 16px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .primary { background: var(--brand); color: #fff; }
+    .ghost { background: #fff; color: var(--brand); border: 1px solid var(--brand); }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .actions { display: none; }
+      .sheet { border: none; box-shadow: none; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <p class="kicker">Q Berries</p>
+    <h1>Instalar Pase de salida</h1>
+    <p class="sub">Escanee este QR con la cámara del celular. Se abrirá la instalación rápida.</p>
+
+    <img
+      class="qr"
+      src="./assets/qr-instalar.png"
+      width="512"
+      height="512"
+      alt="QR para instalar Pase de salida Q Berries"
+    />
+
+    <p class="url">https://pasessalida-qberries.netlify.app/instalar.html</p>
+
+    <div class="steps">
+      <strong>En el celular:</strong>
+      <ol>
+        <li>Escanee el QR.</li>
+        <li>Toque <strong>Instalar aplicación</strong> (Android).</li>
+        <li>En iPhone: Compartir → <strong>Añadir a pantalla de inicio</strong>.</li>
+      </ol>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="primary" onclick="window.print()">Imprimir QR</button>
+      <a class="btn ghost" href="./instalar.html">Probar página instalar</a>
+      <a class="btn ghost" href="./index.html">Ir a la app</a>
+    </div>
+  </div>
+</body>
+</html>

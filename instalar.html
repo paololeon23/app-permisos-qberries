@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1b6b3a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Instalar · Pase de salida Q Berries</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+  <style>
+    :root {
+      --brand: #1b6b3a;
+      --brand-dark: #14522c;
+      --ink: #1a2330;
+      --muted: #6b7785;
+      --line: #e2e8ee;
+      --bg: #f4f7f5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(120% 80% at 50% -10%, #d9f0e2 0%, transparent 55%),
+        var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px 16px 32px;
+    }
+    .card {
+      width: min(420px, 100%);
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 28px 22px 22px;
+      text-align: center;
+      box-shadow: 0 12px 40px rgba(26, 35, 48, 0.08);
+    }
+    .logo {
+      width: 72px;
+      height: 72px;
+      object-fit: contain;
+      margin: 0 auto 12px;
+      display: block;
+    }
+    .kicker {
+      margin: 0;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #c43b4e;
+    }
+    h1 {
+      margin: 6px 0 8px;
+      font-size: 1.45rem;
+      line-height: 1.2;
+    }
+    .sub {
+      margin: 0 0 22px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      min-height: 52px;
+      border: none;
+      border-radius: 12px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-bottom: 10px;
+    }
+    .btn-primary {
+      background: var(--brand);
+      color: #fff;
+    }
+    .btn-primary:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .btn-primary:not(:disabled):active {
+      background: var(--brand-dark);
+    }
+    .btn-ghost {
+      background: #fff;
+      color: var(--brand);
+      border: 1px solid var(--brand);
+    }
+    .msg {
+      margin: 12px 0 0;
+      font-size: 0.9rem;
+      color: var(--muted);
+      min-height: 1.3em;
+    }
+    .msg.ok { color: var(--brand); font-weight: 600; }
+    .msg.warn { color: #b45309; }
+    .ios-steps {
+      display: none;
+      text-align: left;
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: #f7faf8;
+      border: 1px solid var(--line);
+      font-size: 0.9rem;
+      line-height: 1.5;
+      color: var(--ink);
+    }
+    .ios-steps.show { display: block; }
+    .ios-steps ol { margin: 8px 0 0; padding-left: 1.2em; }
+    .status {
+      margin-top: 16px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <img class="logo" src="./assets/logo-qberries.png" alt="Q Berries" />
+    <p class="kicker">Q Berries</p>
+    <h1>Pase de salida</h1>
+    <p class="sub">Toque el botón para instalar la app en este celular. Luego ábrala desde su pantalla de inicio.</p>
+
+    <button type="button" class="btn btn-primary" id="btnInstall">Instalar aplicación</button>
+    <button type="button" class="btn btn-ghost" id="btnOpen">Abrir sin instalar</button>
+
+    <p class="msg" id="msg"></p>
+    <div class="ios-steps" id="iosSteps">
+      <strong>En iPhone / Safari:</strong>
+      <ol>
+        <li>Toque el botón <strong>Compartir</strong> (cuadrado con flecha).</li>
+        <li>Elija <strong>Añadir a pantalla de inicio</strong>.</li>
+        <li>Confirme con <strong>Añadir</strong>.</li>
+      </ol>
+    </div>
+    <p class="status" id="status"></p>
+  </main>
+
+  <script>
+    (function () {
+      var btn = document.getElementById('btnInstall');
+      var btnOpen = document.getElementById('btnOpen');
+      var msg = document.getElementById('msg');
+      var iosSteps = document.getElementById('iosSteps');
+      var statusEl = document.getElementById('status');
+      var deferred = null;
+      var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      var isStandalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        navigator.standalone === true;
+
+      function setMsg(text, cls) {
+        msg.textContent = text || '';
+        msg.className = 'msg' + (cls ? ' ' + cls : '');
+      }
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./service-worker.js', { scope: './' }).catch(function () {});
+      }
+
+      if (isStandalone) {
+        setMsg('Ya está instalada. Abriendo…', 'ok');
+        btn.disabled = true;
+        setTimeout(function () { location.href = './index.html'; }, 600);
+        return;
+      }
+
+      if (isIOS) {
+        iosSteps.classList.add('show');
+        setMsg('En iPhone use Compartir → Añadir a pantalla de inicio', 'warn');
+        statusEl.textContent = 'Safari · iOS';
+      } else {
+        statusEl.textContent = 'Android / Chrome · listo para instalar';
+      }
+
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        deferred = e;
+        setMsg('Listo. Toque «Instalar aplicación»', 'ok');
+        btn.disabled = false;
+      });
+
+      window.addEventListener('appinstalled', function () {
+        setMsg('¡Instalada! Abriendo…', 'ok');
+        deferred = null;
+        setTimeout(function () { location.href = './index.html'; }, 700);
+      });
+
+      btn.addEventListener('click', async function () {
+        if (isIOS) {
+          iosSteps.classList.add('show');
+          setMsg('En iPhone: Compartir → Añadir a pantalla de inicio', 'warn');
+          return;
+        }
+        if (!deferred) {
+          setMsg('Abra el menú ⋮ del navegador → Instalar aplicación', 'warn');
+          return;
+        }
+        try {
+          btn.disabled = true;
+          deferred.prompt();
+          var choice = await deferred.userChoice;
+          if (choice && choice.outcome === 'accepted') {
+            setMsg('Instalando…', 'ok');
+          } else {
+            setMsg('Instalación cancelada. Puede intentar de nuevo.', 'warn');
+            btn.disabled = false;
+          }
+          deferred = null;
+        } catch (err) {
+          setMsg('No se pudo mostrar el instalador. Use el menú ⋮ del navegador.', 'warn');
+          btn.disabled = false;
+        }
+      });
+
+      btnOpen.addEventListener('click', function () {
+        location.href = './index.html';
+      });
+    })();
+  </script>
+</body>
+</html>

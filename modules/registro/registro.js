@@ -108,6 +108,8 @@ AV.registro = {
     if (!this.form) return;
 
     const es = flatpickr.l10ns?.es;
+
+    // fIngreso: solo lectura (viene del trabajador) — nunca abrir calendario
     this.fpIngreso = flatpickr('#fIngreso', {
       locale: es,
       dateFormat: 'Y-m-d',
@@ -120,16 +122,47 @@ AV.registro = {
     if (this.fpIngreso?.altInput) {
       this.fpIngreso.altInput.readOnly = true;
       this.fpIngreso.altInput.placeholder = '-';
+      this.fpIngreso.altInput.tabIndex = -1;
     }
 
+    // fechaSalida: abrir SOLO con clic (no con focus → evitaba “se abre solo”)
     this.fpFecha = flatpickr('#fechaSalida', {
       locale: es,
       dateFormat: 'Y-m-d',
       altInput: true,
       altFormat: 'd/m/Y',
       defaultDate: AV.today(),
-      allowInput: true,
+      allowInput: false,
+      clickOpens: false,
+      closeOnSelect: true,
       disableMobile: true,
+      onClose: (_, __, fp) => {
+        try {
+          fp.altInput?.blur();
+          fp.input?.blur();
+        } catch (_) {}
+      },
+    });
+    this._bindFechaOnlyClick(this.fpFecha);
+
+    // Si tocan fuera / cambian de pestaña: cerrar calendarios colgados
+    document.addEventListener(
+      'pointerdown',
+      (e) => {
+        const t = e.target;
+        if (t?.closest?.('.flatpickr-calendar') || t?.closest?.('.flatpickr-input') || t?.classList?.contains?.('flatpickr-input')) {
+          return;
+        }
+        // altInput de flatpickr
+        if (t?.closest?.('.input-wrap') && (t === this.fpFecha?.altInput || t === this.fpFecha?.input)) {
+          return;
+        }
+        this.closeCalendars();
+      },
+      true
+    );
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.closeCalendars();
     });
 
     const horaEl = document.getElementById('horaSalida');
@@ -139,11 +172,13 @@ AV.registro = {
     // Solo click (no focus): al cerrar Swal el foco vuelve al input y reabriría el modal
     horaEl.addEventListener('click', (e) => {
       e.preventDefault();
+      this.closeCalendars();
       this.openHoraModal();
     });
     horaEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
+        this.closeCalendars();
         this.openHoraModal();
       }
     });
@@ -210,6 +245,46 @@ AV.registro = {
     });
   },
 
+  /** Abre fecha solo con clic; evita reopen por focus/teclado */
+  _bindFechaOnlyClick(fp) {
+    if (!fp) return;
+    const openSafe = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (fp.isOpen) {
+        fp.close();
+        return;
+      }
+      this.fpIngreso?.close();
+      fp.open();
+    };
+    const el = fp.altInput || fp.input;
+    if (!el || el._avFpBound) return;
+    el._avFpBound = true;
+    el.readOnly = true;
+    el.setAttribute('inputmode', 'none');
+    el.addEventListener('click', openSafe);
+    el.addEventListener('mousedown', (e) => e.preventDefault()); // evita focus → reopen
+    el.addEventListener('focus', () => {
+      // Si algo enfoca el campo (p.ej. al cerrar un modal), no abrir calendario
+      if (!fp.isOpen) el.blur();
+    });
+  },
+
+  closeCalendars() {
+    try {
+      this.fpFecha?.close();
+    } catch (_) {}
+    try {
+      this.fpIngreso?.close();
+    } catch (_) {}
+    // Limpiar calendarios huérfanos en el body
+    document.querySelectorAll('.flatpickr-calendar.open').forEach((cal) => {
+      cal.classList.remove('open');
+      cal.style.display = 'none';
+    });
+  },
+
   invalidateCarnet() {
     this.carnetOk = false;
     this.carnetDni = '';
@@ -241,6 +316,7 @@ AV.registro = {
   },
 
   async scanCarnet() {
+    this.closeCalendars();
     const dni = document.getElementById('dni')?.value.trim() || '';
     await AV.qr.openScanner({
       title: 'Escanear carnet del trabajador',
@@ -279,6 +355,7 @@ AV.registro = {
   async openHoraModal() {
     if (this._horaModalBusy) return;
     this._horaModalBusy = true;
+    this.closeCalendars();
 
     const horaEl = document.getElementById('horaSalida');
     const actualRaw = horaEl?.value || AV.nowTime();
@@ -291,7 +368,7 @@ AV.registro = {
         html: `
         <div class="hora-modal">
           <p class="hora-modal-hint">Seleccione la hora (AM / PM)</p>
-          <input id="swalHoraPick" type="text" value="${AV.escape(actual)}" readonly />
+          <input id="swalHoraPick" type="text" value="${AV.escape(actual)}" readonly tabindex="-1" />
         </div>
       `,
         showCancelButton: true,
@@ -313,6 +390,7 @@ AV.registro = {
             defaultDate: actual,
             inline: true,
             static: true,
+            clickOpens: false,
             disableMobile: true,
             minuteIncrement: 1,
           });
@@ -321,6 +399,7 @@ AV.registro = {
           try {
             picker?.destroy();
           } catch (_) {}
+          picker = null;
         },
         preConfirm: () => {
           const v = document.getElementById('swalHoraPick')?.value?.trim();
@@ -336,13 +415,13 @@ AV.registro = {
         horaEl.value = result.value;
       }
     } finally {
-      // Evita que el foco al input reabra el modal
       try {
         horaEl?.blur();
       } catch (_) {}
+      document.activeElement?.blur?.();
       setTimeout(() => {
         this._horaModalBusy = false;
-      }, 350);
+      }, 400);
     }
   },
 

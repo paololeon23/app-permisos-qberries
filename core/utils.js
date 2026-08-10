@@ -159,13 +159,14 @@ AV.isOnline = () => navigator.onLine;
 AV.voice = {
   _ready: false,
   _voice: null,
+  _lastText: '',
+  _lastAt: 0,
 
   init() {
     if (!('speechSynthesis' in window)) return;
     const pick = () => {
       const voices = speechSynthesis.getVoices() || [];
       if (!voices.length) return;
-      // Preferir español (Perú / Latino / España)
       this._voice =
         voices.find((v) => /es-PE/i.test(v.lang)) ||
         voices.find((v) => /es-MX|es-AR|es-CO|es-CL|es-US/i.test(v.lang)) ||
@@ -176,11 +177,9 @@ AV.voice = {
       this._ready = !!this._voice || voices.length > 0;
     };
     pick();
-    // En Chrome las voces cargan async
     if (typeof speechSynthesis.onvoiceschanged !== 'undefined') {
       speechSynthesis.onvoiceschanged = pick;
     }
-    // “Despertar” el motor (algunos Android no hablan el primer intento)
     try {
       const warm = new SpeechSynthesisUtterance(' ');
       warm.volume = 0;
@@ -189,8 +188,21 @@ AV.voice = {
     } catch (_) {}
   },
 
+  /**
+   * @param {string} text
+   * @param {{ force?: boolean, cooldownMs?: number, rate?: number }} opts
+   * force=true → habla siempre (éxito). En errores usa cooldown para no saturar.
+   */
   speak(text, opts = {}) {
     if (!text || !('speechSynthesis' in window)) return;
+    const now = Date.now();
+    const cooldown = opts.cooldownMs ?? 2500;
+    const force = !!opts.force;
+    if (!force && text === this._lastText && now - this._lastAt < cooldown) {
+      return;
+    }
+    this._lastText = text;
+    this._lastAt = now;
     try {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(String(text));
@@ -205,9 +217,24 @@ AV.voice = {
     }
   },
 
-  /** Frase al validar carnet (offline OK) */
+  /** Frases del escáner de carnet */
   dniValidado() {
-    this.speak('DNI validado');
+    this.speak('DNI validado', { force: true });
+  },
+  dniNoCoincide() {
+    this.speak('DNI no coincide', { cooldownMs: 2800 });
+  },
+  qrSinDni() {
+    this.speak('Código inválido. No se encontró D N I', { cooldownMs: 2800 });
+  },
+  camaraError() {
+    this.speak('No se pudo abrir la cámara', { force: true });
+  },
+  dniRequerido() {
+    this.speak('Primero ingrese el D N I del trabajador', { force: true });
+  },
+  escanerListo() {
+    this.speak('Escanee el carnet', { force: true, rate: 1.05 });
   },
 };
 

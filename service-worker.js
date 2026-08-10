@@ -1,11 +1,13 @@
 /* Service Worker — Pase de salida Q Berries
  * Offline-safe: siempre responde con un Response válido
  */
-const CACHE = 'av-permisos-v50';
+const CACHE = 'av-permisos-v53';
 
 const PRECACHE = [
   './',
   './index.html',
+  './instalar.html',
+  './imprimir-qr.html',
   './manifest.webmanifest',
   './css/app.css',
   './core/api-config.js',
@@ -26,6 +28,7 @@ const PRECACHE = [
   './icons/apple-touch-icon.png',
   './assets/logo-qberries.png',
   './assets/logo-qberries-white.png',
+  './assets/qr-instalar.png',
   './vendor/sweetalert2.all.min.js',
   './vendor/flatpickr.min.js',
   './vendor/flatpickr-es.js',

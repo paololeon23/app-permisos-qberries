@@ -19,8 +19,11 @@ window.API_CONFIG = {
   HISTORY_KEY: 'av_permisos_historial_v1',
 
   APP_NAME: 'Pase de salida Q Berries',
-  APP_VERSION: '1.0.3',
+  APP_VERSION: '1.0.5',
   COMPANY: 'Q Berries',
   YEAR: 2026,
   TIMEZONE: 'America/Lima',
+  /** URL pública (Netlify) — QR de instalación */
+  PUBLIC_URL: 'https://pasessalida-qberries.netlify.app/',
+  INSTALL_URL: 'https://pasessalida-qberries.netlify.app/instalar.html',
 };
