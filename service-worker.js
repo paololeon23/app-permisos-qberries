@@ -1,7 +1,7 @@
 /* Service Worker — Pase de salida Q Berries
  * Offline-safe: siempre responde con un Response válido
  */
-const CACHE = 'av-permisos-v55';
+const CACHE = 'av-permisos-v57';
 
 const PRECACHE = [
   './',
@@ -98,7 +98,11 @@ function isCdn(url) {
 }
 
 function isApi(url) {
-  return /script\.google\.com|macros\/s\//.test(url);
+  return (
+    /script\.google\.com|macros\/s\//.test(url) ||
+    /\/api\/(permisos|trabajadores)/.test(url) ||
+    /\/\.netlify\/functions\//.test(url)
+  );
 }
 
 self.addEventListener('fetch', (event) => {

@@ -12,21 +12,15 @@
  * 4) Implementar → Aplicación web
  *    - Ejecutar como: Yo
  *    - Quién tiene acceso: Cualquier persona
- * 5) Copia la URL …/exec  →  core/api-config.js → TRABAJADORES_URL
- *
- * ENDPOINTS
- *  GET  ?action=contarTrabajadores
- *  GET  ?action=obtenerPorDni&dni=70839380
- *  GET  ?action=listarTrabajadores
- *  GET  ?action=buscarTrabajador&q=quispe
- *  GET  ?action=ping
- *  POST { action: "listarTrabajadores" }
- *  POST { action: "upsertTrabajador", data: {...} }
- *  POST { action: "bulkUpsert", data: [ {...}, {...} ] }
+ * 5) Copia la URL …/exec  → SOLO Netlify env TRABAJADORES_SCRIPT_URL
+ * 6) Propiedades del script → API_TOKEN (mismo que Netlify)
  */
 
 /** Nombre exacto de tu hoja — no se creará otra */
 var SHEET_NAME = 'Hoja 1';
+
+/** Configura API_TOKEN en Propiedades del script (mismo valor que Netlify). */
+var DEFAULT_API_TOKEN = '';
 
 var HEADERS = [
   'DNI',
@@ -46,6 +40,7 @@ function doGet(e) {
   var action = String(p.action || 'listarTrabajadores').trim();
 
   try {
+    assertToken_(p);
     if (action === 'ping') {
       return jsonOut_({ ok: true, api: 'trabajadores', ts: nowIso_() });
     }
@@ -67,7 +62,12 @@ function doGet(e) {
     }
     return jsonOut_({ ok: false, message: 'Acción GET no válida: ' + action });
   } catch (err) {
-    return jsonOut_({ ok: false, message: String(err) });
+    var msgG = String(err && err.message ? err.message : err).replace(/^Error:\s*/i, '');
+    return jsonOut_({
+      ok: false,
+      code: /no autorizado/i.test(msgG) ? 'UNAUTHORIZED' : 'ERROR',
+      message: msgG
+    });
   }
 }
 
@@ -75,6 +75,7 @@ function doPost(e) {
   _jsonpCb = '';
   try {
     var body = parseBody_(e);
+    assertToken_(body);
     var action = String(body.action || 'listarTrabajadores').trim();
     var data = body.data != null ? body.data : body;
 
@@ -98,7 +99,32 @@ function doPost(e) {
     }
     return jsonOut_({ ok: false, message: 'Acción POST no válida: ' + action });
   } catch (err) {
-    return jsonOut_({ ok: false, message: String(err) });
+    var msg = String(err && err.message ? err.message : err).replace(/^Error:\s*/i, '');
+    return jsonOut_({
+      ok: false,
+      code: /no autorizado/i.test(msg) ? 'UNAUTHORIZED' : 'ERROR',
+      message: msg
+    });
+  }
+}
+
+function expectedToken_() {
+  try {
+    var fromProps = PropertiesService.getScriptProperties().getProperty('API_TOKEN');
+    if (fromProps && String(fromProps).trim()) return String(fromProps).trim();
+  } catch (_) {}
+  return String(DEFAULT_API_TOKEN || '').trim();
+}
+
+function assertToken_(src) {
+  src = src || {};
+  var got = clean_(src.token || src.apiToken || src.API_TOKEN || '');
+  var need = expectedToken_();
+  if (!need) {
+    throw new Error('Configure API_TOKEN en Propiedades del script (Apps Script)');
+  }
+  if (!got || got !== need) {
+    throw new Error('No autorizado: token inválido o ausente');
   }
 }
 

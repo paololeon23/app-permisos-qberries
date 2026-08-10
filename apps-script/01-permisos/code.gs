@@ -7,33 +7,35 @@
  * SETUP
  * 1) Abre el Google Sheet BD-PERMISOS (el que ya tienes)
  * 2) Extensiones → Apps Script → pega ESTE archivo completo
- * 3) Guardar → Implementar → Nueva versión → Aplicación web
+ * 3) Propiedades del script → API_TOKEN = (mismo que Netlify)
+ *    O edita DEFAULT_API_TOKEN abajo
+ * 4) Guardar → Implementar → Nueva versión → Aplicación web
  *    - Ejecutar como: Yo
  *    - Quién tiene acceso: Cualquier persona
- * 4) Copia la URL …/exec  →  core/api-config.js → PERMISOS_URL
+ * 5) Copia la URL …/exec  → SOLO a Netlify env PERMISOS_SCRIPT_URL
+ *    (NO la pongas en el JS público de la app)
+ *
+ * SEGURIDAD
+ *  - Toda petición exige ?token=... o body.token
+ *  - La app pública habla con /api/permisos (proxy Netlify)
  *
  * ENDPOINTS
- *  POST { action: "crearPermiso", data: {...} }
- *  GET  ?action=listarPermisos
- *       Por defecto: SOLO HOY (Lima) — rápido
- *       ?todas=1  → todas las fechas (botón "Todas las fechas")
- *       ?fecha=YYYY-MM-DD → un día concreto
- *       ?dni=… &limit=…
- *       Respuesta:
- *       {
- *         ok, api, rango: { modo, fecha, todas },
- *         count,
- *         motivos: [{ motivo, count }],
- *         topMotivo: { motivo, count } | null,
- *         porDia: [{ fecha, count }],
- *         data: [ ...filas ]
- *       }
- *  GET  ?action=ping
+ *  POST { action: "crearPermiso", data: {...}, token }
+ *  GET  ?action=listarPermisos&token=...
+ *  GET  ?action=ping&token=...
  *
  * Usa «Hoja 1» (NO crea otra hoja)
  */
 
 var SHEET_NAME = 'Hoja 1';
+
+/**
+ * Token por defecto vacío a propósito (para que Netlify no falle el secrets scan).
+ * Configúralo en: Apps Script → Configuración del proyecto → Propiedades del script
+ *   Clave: API_TOKEN
+ *   Valor: el mismo que en Netlify
+ */
+var DEFAULT_API_TOKEN = '';
 
 var HEADERS = [
   'fechaRegistro',
@@ -67,6 +69,7 @@ function doGet(e) {
   var action = String(p.action || 'ping').trim();
 
   try {
+    assertToken_(p);
     if (action === 'ping') {
       var ssPing = SpreadsheetApp.getActiveSpreadsheet();
       return jsonOut_({
@@ -97,7 +100,9 @@ function doGet(e) {
     }
     return jsonOut_({ ok: false, message: 'Acción GET no válida: ' + action });
   } catch (err) {
-    return jsonOut_({ ok: false, message: String(err) });
+    var msgGet = String(err && err.message ? err.message : err).replace(/^Error:\s*/i, '');
+    var codeGet = /no autorizado/i.test(msgGet) ? 'UNAUTHORIZED' : 'ERROR';
+    return jsonOut_({ ok: false, code: codeGet, message: msgGet });
   }
 }
 
@@ -105,6 +110,7 @@ function doPost(e) {
   _jsonpCb = '';
   try {
     var body = parseBody_(e);
+    assertToken_(body);
     var action = String(body.action || 'crearPermiso').trim();
     var data = body.data || body;
 
@@ -118,8 +124,33 @@ function doPost(e) {
     return jsonOut_({ ok: false, message: 'Acción POST no válida: ' + action });
   } catch (err) {
     var msg = String(err && err.message ? err.message : err).replace(/^Error:\s*/i, '');
-    var code = /ya tiene un pase/i.test(msg) ? 'DUPLICATE' : 'ERROR';
+    var code = /ya tiene un pase/i.test(msg)
+      ? 'DUPLICATE'
+      : /no autorizado/i.test(msg)
+        ? 'UNAUTHORIZED'
+        : 'ERROR';
     return jsonOut_({ ok: false, code: code, message: msg });
+  }
+}
+
+/** Token obligatorio (proxy Netlify lo envía; URL directa sin token = rechazada) */
+function expectedToken_() {
+  try {
+    var fromProps = PropertiesService.getScriptProperties().getProperty('API_TOKEN');
+    if (fromProps && String(fromProps).trim()) return String(fromProps).trim();
+  } catch (_) {}
+  return String(DEFAULT_API_TOKEN || '').trim();
+}
+
+function assertToken_(src) {
+  src = src || {};
+  var got = clean_(src.token || src.apiToken || src.API_TOKEN || '');
+  var need = expectedToken_();
+  if (!need) {
+    throw new Error('Configure API_TOKEN en Propiedades del script (Apps Script)');
+  }
+  if (!got || got !== need) {
+    throw new Error('No autorizado: token inválido o ausente');
   }
 }
 

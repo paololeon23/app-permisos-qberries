@@ -1,5 +1,7 @@
 /**
- * Capa de red: GET por JSONP (evita CORS con Apps Script) + POST text/plain
+ * Capa de red:
+ * - Mismo origen (/api/*) → fetch JSON (proxy Netlify)
+ * - URL externa Google → JSONP GET / POST text/plain (legado)
  */
 window.AV = window.AV || {};
 
@@ -12,8 +14,13 @@ AV.network = {
     }
   },
 
+  _isSameOriginProxy(url) {
+    const u = String(url || '');
+    return u.startsWith('/') || u.startsWith(location.origin);
+  },
+
   /**
-   * GET vía JSONP — no lo bloquea CORS del navegador
+   * GET vía JSONP — solo para Apps Script directo (legado)
    */
   jsonp(url, params = {}, timeout) {
     this._ensureUrl(url);
@@ -61,8 +68,64 @@ AV.network = {
     });
   },
 
+  async fetchJson(url, { method = 'GET', body = null, params = null, timeout } = {}) {
+    this._ensureUrl(url);
+    const ms = timeout ?? (window.API_CONFIG?.TIMEOUT_MS ?? 15000);
+    let finalUrl = url;
+    if (params && typeof params === 'object') {
+      const q = new URLSearchParams(params).toString();
+      finalUrl += (url.includes('?') ? '&' : '?') + q;
+    }
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+
+    try {
+      const opts = {
+        method: String(method).toUpperCase(),
+        signal: ctrl.signal,
+        redirect: 'follow',
+        headers: { Accept: 'application/json' },
+      };
+      if (opts.method !== 'GET' && opts.method !== 'HEAD') {
+        opts.headers['Content-Type'] = 'application/json;charset=utf-8';
+        opts.body = typeof body === 'string' ? body : JSON.stringify(body || {});
+      }
+
+      const res = await fetch(finalUrl, opts);
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { ok: false, raw: text, message: 'Respuesta no JSON' };
+      }
+      if (!res.ok && data && data.ok !== false) {
+        const err = new Error(data.message || `HTTP ${res.status}`);
+        err.status = res.status;
+        err.data = data;
+        throw err;
+      }
+      return data;
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        const err = new Error('Tiempo de espera agotado');
+        err.code = 'TIMEOUT';
+        throw err;
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+
   async request(url, { method = 'GET', body = null, params = null, timeout } = {}) {
-    // GET → JSONP (CORS-safe con Apps Script)
+    // Proxy Netlify (mismo sitio): fetch JSON — el token lo pone el servidor
+    if (this._isSameOriginProxy(url)) {
+      return this.fetchJson(url, { method, body, params, timeout });
+    }
+
+    // GET externo → JSONP (CORS-safe con Apps Script)
     if (String(method).toUpperCase() === 'GET') {
       return this.jsonp(url, params || {}, timeout);
     }
@@ -93,7 +156,6 @@ AV.network = {
       try {
         data = JSON.parse(text);
       } catch {
-        // Si Google devolvió HTML (error de deploy), avisar claro
         if (/doGet|doPost|Script function not found/i.test(text)) {
           const err = new Error('La API no está implementada. Vuelve a implementar el code.gs.');
           err.code = 'NO_DEPLOY';
@@ -115,7 +177,6 @@ AV.network = {
         err.code = 'TIMEOUT';
         throw err;
       }
-      // Fallback no-cors: NO confirmar éxito (no se puede leer la respuesta)
       if (e.message && /Failed to fetch|CORS|NetworkError/i.test(e.message)) {
         try {
           await fetch(finalUrl, {
